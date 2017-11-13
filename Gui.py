@@ -1,8 +1,11 @@
 from Main import main, __version__ as ESVersion
 from argparse import Namespace
+from Rom import Sprite
+from glob import glob
 import random
-
-from tkinter import Checkbutton, OptionMenu, Tk, LEFT, RIGHT, BOTTOM, TOP, StringVar, IntVar, Frame, Label, W, E, Entry, Spinbox, Button, filedialog, messagebox
+from tkinter import Checkbutton, OptionMenu, Toplevel, LabelFrame, PhotoImage, Tk, X, Y, LEFT, RIGHT, BOTTOM, TOP, StringVar, IntVar, Frame, Label, W, E, Entry, Spinbox, Button, filedialog, messagebox
+#from tkinter import *
+#from tkinter.ttk import *
 
 
 def guiMain(args=None):
@@ -61,8 +64,9 @@ def guiMain(args=None):
     spriteEntry = Entry(spriteDialogFrame, textvariable=spriteVar)
 
     def SpriteSelect():
-        sprite = filedialog.askopenfilename()
-        spriteVar.set(sprite)
+        #sprite = filedialog.askopenfilename()
+        #spriteVar.set(sprite)
+        SpriteSelector(Toplevel(mainWindow), spriteVar.set)
 
     spriteSelectButton = Button(spriteDialogFrame, text='Select Sprite', command=SpriteSelect)
 
@@ -249,6 +253,94 @@ def guiMain(args=None):
 
     mainWindow.mainloop()
 
+class SpriteSelector(object):
+    def __init__(self, parent, callback):
+        self.parent = parent
+        self.callback = callback
+        parent.wm_title("TAKE ANY ONE YOU WANT")
+        parent['padx']=5
+        parent['pady']=5
+
+        self.icon_section('Official Sprites', 'sprites/official/*', 'Official Sprites not found. Click "Update Official Sprites" to download them.')
+        self.icon_section('Unofficial Sprites', 'sprites/unofficial/*', 'Put sprites in the Sprites/Unofficial folder to have them appear here.')
+
+        frame = Frame(parent)
+        frame.pack(side=BOTTOM, fill=X, pady=5)
+
+        button = Button(frame, text="Browse for file...", command=self.browse_for_sprite)
+        button.pack(side=RIGHT, padx=(5,0))
+
+        # todo: Actually implement this. Requires a yet-to-be coded API from VT
+        button = Button(frame, text="Update Official Sprites")
+        button.pack(side=RIGHT, padx=(5,0))
+
+        button = Button(frame, text="Use Default Sprite", command=self.use_default_sprite)
+        button.pack(side=LEFT)
+
+    def icon_section(self, frame_label, path, no_results_label):
+        frame = LabelFrame(self.parent, text=frame_label, padx=5, pady=5)
+        frame.pack(side=TOP, fill=X)
+
+        i=0
+        for file in glob(path):
+            image = get_image_for_sprite(file)
+            if image is None: continue
+            button = Button(frame, image=image, command=lambda file=file:self.select_sprite(file))
+            button.image=image
+            button.grid(row=i//16, column=i%16)
+            i+=1
+
+        if i==0:
+            label = Label(frame, text="Put sprites in the Sprites/Unoffical folder to have them appear here.")
+            label.pack()
+
+    def browse_for_sprite(self):
+        sprite = filedialog.askopenfilename()
+        self.callback(sprite)
+        self.parent.destroy()
+
+    def use_default_sprite(self):
+        self.callback("")
+        self.parent.destroy()
+
+    def select_sprite(self, spritename):
+        self.callback(spritename)
+        self.parent.destroy()
+
+def get_image_for_sprite(filename):
+    sprite = Sprite(filename)
+    image = PhotoImage(height=24, width=16, palette="256/256/256")
+
+    def color_to_hex(color):
+        return "#{0:02X}{1:02X}{2:02X}".format(*color)
+
+    def drawsprite(spr, pal_as_colors, offset):
+        for y in range(len(spr)):
+            for x in range(len(spr[y])):
+                pal_index=spr[y][x]
+                if pal_index:
+                    color=pal_as_colors[pal_index-1]
+                    image.put(color_to_hex(color),to=(x+offset[0],y+offset[1]))
+
+    shadow_palette = [(40,40,40)]
+    shadow = [
+		[0,0,0,1,1,1,1,1,1,0,0,0],
+		[0,1,1,1,1,1,1,1,1,1,1,0],
+		[1,1,1,1,1,1,1,1,1,1,1,1],
+		[1,1,1,1,1,1,1,1,1,1,1,1],
+		[0,1,1,1,1,1,1,1,1,1,1,0],
+		[0,0,0,1,1,1,1,1,1,0,0,0],
+	]
+
+    drawsprite(shadow, shadow_palette, (2,17))
+
+    palettes = sprite.decode_palette()
+    body = sprite.decode16(0x4C0)
+    drawsprite(body, palettes[0], (0,8))
+    head = sprite.decode16(0x40)
+    drawsprite(head, palettes[0], (0,0))
+
+    return image.zoom(2)
 
 if __name__ == '__main__':
     guiMain()
